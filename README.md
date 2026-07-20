@@ -45,7 +45,7 @@ earnings_sentiment_tool/
 
 ---
 
-## 🎙️ What This Tool Does
+## What This Tool Does
 
 This module researches the linguistic patterns in corporate earnings calls, testing the hypothesis that executives use verbosity or complex language to obfuscate poor quarterly performance ("bad news").
 

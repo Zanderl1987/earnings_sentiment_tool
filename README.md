@@ -4,7 +4,7 @@ A financial NLP research pipeline studying whether corporate executives become m
 
 ---
 
-## 🏗️ Repository Architecture & Layout
+## Repository Architecture & Layout
 
 ```
 earnings_sentiment_tool/
@@ -61,7 +61,7 @@ This module researches the linguistic patterns in corporate earnings calls, test
 
 ---
 
-## ⚙️ Setup & Configuration
+## Setup & Configuration
 
 ### Prerequisites
 *   Windows OS (configured for PowerShell execution if utilizing automatic pulling scripts)
@@ -79,7 +79,7 @@ This module researches the linguistic patterns in corporate earnings calls, test
 
 ---
 
-## 🚀 Execution & Usage
+## Execution & Usage
 
 Always execute python scripts using the full path to your Python interpreter.
 
@@ -111,7 +111,7 @@ C:\ProgramData\anaconda3\python.exe scripts\run_labeled_study.py
 
 ---
 
-## 🤖 Automation & Task Scheduling
+## Automation & Task Scheduling
 
 The project features a scheduled Windows Task to run the daily Alpha Vantage pull:
 
@@ -124,7 +124,7 @@ Refer to [AUTOMATION.md](AUTOMATION.md) for full automation rules, troubleshooti
 
 ---
 
-## 🧪 Testing
+## Testing
 
 Run unit tests via `pytest`:
 ```powershell
@@ -133,7 +133,7 @@ C:\ProgramData\anaconda3\python.exe -m pytest
 
 ---
 
-## 📄 License & Contact
+## License & Contact
 *   **Owner**: Zander
 *   **Branch**: `master`
 *   **Contact/Support**: Refer to `EXPERT_BRIEF.md` for methodology questions and analytical limitations before interpreting results.

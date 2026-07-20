@@ -1,0 +1,14 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+storage/transcripts/
+storage/earnings_surprise/
+storage/labels/
+storage/study_labeled/
+storage/study_first_pass/
+storage/pull_log.txt
+storage/earnings_pull_log.txt
+PULL_STALLED.txt
+EARNINGS_PULL_FAILED.txt

@@ -58,6 +58,17 @@ EXPANDED 2026-07-13: 29 tickers x 25 pinned quarters (2020Q2–2026Q2) = 725 tra
 Original 5 (IEP anchor case, PLTR, AMD, VRT, VST) fully cached; 16 event names + 8 pre-registered
 controls fill via the daily task at 25 files/day through ~2026-08-06.
 
+**2026-07-26 status:** cache at 302/725. The daily task was silently broken
+2026-07-20→2026-07-25 by the split out of `custom_index_tool` (`daily_transcript_pull.ps1`
+still called the pre-split `-m src.nlp.build_transcript_dataset`; fixed to
+`-m src.build_transcript_dataset`, commit `0d7df54`) — `PULL_STALLED.txt` misleadingly
+blamed quota the whole time. Confirmed fixed: the 2026-07-26 10:30 run added +25 cleanly.
+Stage 2 (`scripts/pull_earnings_surprise.py`) is still stuck at 1/7 (only NVDA, from the
+2026-07-19 run that hard-stopped before the split) — needs a rerun in the ~10:05 morning
+gap per the script's own docstring ("never run this mid-day"); attempted mid-session on
+2026-07-26 at 17:16 but skipped since that day's 25-call quota was already spent by the
+10:30 task. Next actionable morning: run `scripts/pull_earnings_surprise.py` before 10:30.
+
 **AV quarter labels are FISCAL, not calendar** (probed 2026-07-13,
 `scripts/probe_fiscal_quarters.py`) — 11 tickers are fiscal-offset; uniform label
 list kept by design, but any label join MUST map (ticker, fiscal quarter) → real

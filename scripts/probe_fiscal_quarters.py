@@ -32,7 +32,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from src.nlp.transcript_fetcher import TranscriptFetcher
+from src.transcript_fetcher import TranscriptFetcher
 
 PROBES = [("NVDA", "2024Q2"), ("ORCL", "2024Q2")]
 

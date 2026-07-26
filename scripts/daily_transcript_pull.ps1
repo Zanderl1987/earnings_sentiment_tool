@@ -8,7 +8,7 @@ $py = "C:\ProgramData\anaconda3\python.exe"
 $dir = Join-Path $repo "storage\transcripts"
 $log = Join-Path $repo "storage\pull_log.txt"
 $flag = Join-Path $repo "PULL_STALLED.txt"
-# Keep in sync with len(TICKERS) * NUM_QUARTERS in src\nlp\build_transcript_dataset.py
+# Keep in sync with len(TICKERS) * NUM_QUARTERS in src\build_transcript_dataset.py
 # (29 x 25 = 725; tests\test_dataset_config.py enforces the match).
 $target = 725
 
@@ -26,7 +26,7 @@ Set-Location $repo
 $env:PYTHONIOENCODING = "utf-8"
 # cmd /c does the redirection: PS 5.1 would wrap python's stderr lines in
 # NativeCommandError records and pollute the log
-cmd /c "`"$py`" -m src.nlp.build_transcript_dataset >> `"$log`" 2>&1"
+cmd /c "`"$py`" -m src.build_transcript_dataset >> `"$log`" 2>&1"
 $exit = $LASTEXITCODE
 
 $after = (Get-ChildItem $dir -File -ErrorAction SilentlyContinue | Measure-Object).Count

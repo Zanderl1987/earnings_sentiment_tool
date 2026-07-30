@@ -10,7 +10,13 @@ Owner: Zander. Branch: `master`.
 - Secrets in `.env` at repo root (gitignored): `ALPHA_VANTAGE_API_KEY` + `_2`.
   Alpha Vantage free tier = 25 requests/day TOTAL - enforced per IP, so the
   second key does NOT double the budget (proven by 07-14/15 pull logs:
-  both runs stopped at exactly +25).
+  both runs stopped at exactly +25). **Both keys rotated 2026-07-29** after
+  an AV rate-limit error echoed them in plaintext into this session's
+  transcript and `storage/pull_log.txt` (log scrubbed same day) - old keys
+  no longer used anywhere.
+- `ROIC_API_KEY` (optional, not yet set) - supplementary transcript source,
+  see `scripts/pull_roic_transcripts.py`. Free signup, no credit card:
+  https://www.roic.ai/pricing.
 
 ## Layout
 
@@ -22,6 +28,7 @@ earnings_sentiment_tool/
 │   ├── earnings_call_study.py     # run_earnings_call_study() computes verbosity/sentiment correlation
 │   ├── sentiment_analyzer.py      # Loughran-McDonald & readability (Gunning-Fog) engine
 │   ├── earnings_surprise.py       # Alpha Vantage EARNINGS surprise downloader + fiscal-quarter derivation
+│   ├── roic_transcript_fetcher.py # Supplementary transcript source (Roic AI) - see Active project below
 │   └── label_join.py              # Joins financial/market labels to NLP stats
 │
 ├── scripts/
@@ -29,10 +36,12 @@ earnings_sentiment_tool/
 │   ├── earnings_surprise_pull.ps1 # One-shot PS1 wrapper for surprise data pull
 │   ├── probe_fiscal_quarters.py   # Validates fiscal-quarter alignment on AV
 │   ├── pull_earnings_surprise.py  # Script to fetch surprise records + verify derivation
+│   ├── pull_roic_transcripts.py   # Supplementary transcript pull via Roic AI (not yet run - needs ROIC_API_KEY)
 │   └── run_labeled_study.py       # Stage-2: combines transcripts with market returns (external labels)
 │
 ├── tests/
 │   ├── test_earnings_surprise.py
+│   ├── test_roic_transcript_fetcher.py
 │   ├── test_label_join.py
 │   └── test_dataset_config.py
 │
@@ -58,16 +67,51 @@ EXPANDED 2026-07-13: 29 tickers x 25 pinned quarters (2020Q2–2026Q2) = 725 tra
 Original 5 (IEP anchor case, PLTR, AMD, VRT, VST) fully cached; 16 event names + 8 pre-registered
 controls fill via the daily task at 25 files/day through ~2026-08-06.
 
-**2026-07-26 status:** cache at 302/725. The daily task was silently broken
-2026-07-20→2026-07-25 by the split out of `custom_index_tool` (`daily_transcript_pull.ps1`
-still called the pre-split `-m src.nlp.build_transcript_dataset`; fixed to
-`-m src.build_transcript_dataset`, commit `0d7df54`) — `PULL_STALLED.txt` misleadingly
-blamed quota the whole time. Confirmed fixed: the 2026-07-26 10:30 run added +25 cleanly.
-Stage 2 (`scripts/pull_earnings_surprise.py`) is still stuck at 1/7 (only NVDA, from the
-2026-07-19 run that hard-stopped before the split) — needs a rerun in the ~10:05 morning
-gap per the script's own docstring ("never run this mid-day"); attempted mid-session on
-2026-07-26 at 17:16 but skipped since that day's 25-call quota was already spent by the
-10:30 task. Next actionable morning: run `scripts/pull_earnings_surprise.py` before 10:30.
+**2026-07-29 status: Stage 2 Step 1 (earnings-surprise pull) is COMPLETE.** All 7
+tickers built (NVDA/ORCL verification passed 4/4 against probe ground truth; IEP/PLTR/
+AMD/VRT/VST all have surprise tables). Found and fixed a real bug along the way: IEP's
+AV `annualEarnings` is missing FY2000 and FY2005 entirely (a genuine gap in AV's own
+data), and `derive_fiscal_quarters()` used to hard-stop the ENTIRE 111-quarter ticker
+over just the 6 quarters that fell in those two gaps - including the perfectly good
+2020-2026 window this project actually needs. Fixed to skip only the individually
+unresolvable quarters (with a warning), not the whole ticker; duplicate-label collisions
+still hard-stop (that's a different, more dangerous ambiguity). Verified against the
+real cached `IEP.json`: 105/111 quarters recovered, full 2020-2026 window intact
+including the 2023 post-Hindenburg quarters. 22 tests in `test_earnings_surprise.py`,
+all passing. **Next: Step 2 (`scripts/run_labeled_study.py`) can now run - zero quota,
+cache-only.**
+
+Transcript cache at 350/725 as of 2026-07-29 (16 of 29 tickers - LMT, NOC, AMZN, ARM,
+LRCX, GEV, ORCL, DELL, PG, KO, CL, KMB, TXN, ADP, ACN, GD - not yet started; ETA
+unchanged, ~2026-08-06 at 25/day). `PULL_STALLED.txt` is present as of this writing but
+already explained, not a new problem: the 2026-07-29 10:30 automated run used the
+OLD (pre-rotation) Alpha Vantage keys and hit their exhausted quota; the keys were
+rotated later that same afternoon (see Environment section). The new keys already spent
+6 calls that afternoon on the earnings-surprise pull above, so the 2026-07-30 10:30 run
+will have ~19/25 headroom rather than a fresh 25 (rolling-24h window) - expect a
+partial, not a full, day's fill; nothing to fix, just don't be surprised by a lower
+`+N` in `pull_log.txt`.
+
+**Built, not yet run: a supplementary Roic AI transcript source**
+(`src/roic_transcript_fetcher.py` + `scripts/pull_roic_transcripts.py`, 9 tests passing)
+to offload the newest quarters from Alpha Vantage's 25/day bottleneck for the 16
+untouched tickers. Roic's free tier (signup at roic.ai/pricing, no credit card) covers
+only the most recent 8 fiscal quarters per company at 5 req/min - not a full
+replacement, just a faster source for the newest slice of the pinned window. The script
+verifies Roic's fiscal-quarter labeling against this project's own AV-derived
+`reported_date` (AMD, since it has clean ground truth from Step 1) before pulling
+anything else - hard-stops if they disagree, exactly the same "never join on an
+unverified label" lesson AV's own fiscal-quarter probe already taught this project.
+Roic turns are normalized from `{speaker, text}` to Alpha Vantage's `{speaker, content}`
+shape (tagged `source: "roic"`) so `earnings_call_study.py` reads them correctly with no
+changes there; Roic transcripts have no per-turn sentiment score, so `av_sentiment`
+correlations will skip any ticker that mixes both sources (`lm_net_sentiment`/
+`fog_index` are unaffected). **Blocked on the user signing up for a free `ROIC_API_KEY`**
+- once set in `.env`, run `scripts/pull_roic_transcripts.py`. One unverified assumption
+worth checking on the first live run: the fetcher defaults every ticker to
+`NASDAQ:{ticker}`, but several of the 29 tickers are NYSE-listed - not hardcoded from
+memory to avoid asserting wrong exchange facts, so some may come back empty on a wrong
+exchange prefix rather than genuinely unavailable.
 
 **AV quarter labels are FISCAL, not calendar** (probed 2026-07-13,
 `scripts/probe_fiscal_quarters.py`) — 11 tickers are fiscal-offset; uniform label
@@ -94,10 +138,11 @@ data traps (per-ticker quarter availability, quota discipline).
 
 Stage 2 (external labels): implemented in `scripts/run_labeled_study.py`.
 Execution:
-1. `scripts/pull_earnings_surprise.py` - 7 AV calls, quota-gated, run on a morning per AUTOMATION.md.
+1. ~~`scripts/pull_earnings_surprise.py` - 7 AV calls, quota-gated~~ **DONE 2026-07-29**
+   (see status above - all 7 tickers built, IEP derivation bug fixed).
 2. `scripts/run_labeled_study.py` - zero quota, cache-only, produces outputs in storage/labels/ and storage/study_labeled/.
    Requires: financial-data-pipeline repo at `C:\Users\zande\PycharmProjects\financial-data-pipeline`
-   (set `FDP_REPO_PATH` env var to override).
+   (set `FDP_REPO_PATH` env var to override). **Not yet run.**
 
 ## Cross-repo dependency
 

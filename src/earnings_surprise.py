@@ -19,6 +19,7 @@ any boundary is computed.
 import os
 import time
 import json
+import warnings
 from collections import Counter
 
 import pandas as pd
@@ -66,8 +67,14 @@ def derive_fiscal_quarters(quarterly, annual):
     falls under (extrapolated forward one year at a time past the last
     reported annual, for the in-progress fiscal year). Quarter number from
     month distance to that fiscal year end - round() absorbs the +/- 1 month
-    drift of 52/53-week calendars. Anything that doesn't land cleanly on
-    Q1..Q4, or two quarters landing on the same label, raises
+    drift of 52/53-week calendars.
+
+    A quarter with no annual coverage nearby (annualEarnings gap - observed
+    live, IEP's AV data is missing FY2000 and FY2005 entirely) is SKIPPED,
+    with a warning, rather than aborting every other quarter for that ticker;
+    the gap is real but scoped to that one quarter, not the whole history.
+    Two quarters landing on the SAME label is a different, more dangerous
+    kind of ambiguity (both look individually valid) and still raises
     FiscalDerivationError (hard stop: never join on a suspect key).
     """
     q_ends = sorted({pd.Timestamp(r["fiscalDateEnding"]) for r in quarterly})
@@ -82,15 +89,18 @@ def derive_fiscal_quarters(quarterly, annual):
     for q in q_ends:
         candidates = [a for a in fy_ends if a >= q - pd.Timedelta(days=10)]
         if not candidates:
-            raise FiscalDerivationError(
-                f"no fiscal year end on or after quarter end {q.date()}")
+            warnings.warn(
+                f"skipping quarter {q.date()}: no fiscal year end on or "
+                f"after it (annualEarnings gap or bad data)")
+            continue
         fy_end = candidates[0]
         months = (fy_end.year - q.year) * 12 + (fy_end.month - q.month)
         n = 4 - round(months / 3)
         if not 1 <= n <= 4:
-            raise FiscalDerivationError(
-                f"quarter end {q.date()} sits {months} months before fiscal "
-                f"year end {fy_end.date()} - annualEarnings gap or bad data")
+            warnings.warn(
+                f"skipping quarter {q.date()}: sits {months} months before "
+                f"fiscal year end {fy_end.date()} (annualEarnings gap or bad data)")
+            continue
         label = f"{fy_end.year}Q{n}"
         if label in claimed:
             raise FiscalDerivationError(

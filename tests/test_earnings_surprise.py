@@ -83,12 +83,36 @@ def test_53_week_calendar_drift_tolerated():
     assert labels["2020-05-03"] == "2021Q1"
 
 
-def test_missing_annual_year_raises():
-    # A gap in annualEarnings would silently mislabel a whole year - hard stop.
+def test_missing_annual_year_skips_only_the_affected_quarter():
+    # A gap in annualEarnings must not silently mislabel the affected quarter,
+    # but it also must not poison quarters outside the gap (real IEP bug,
+    # 2026-07-29: AV's annualEarnings is missing FY2000 and FY2005 entirely,
+    # which used to hard-stop derivation for ALL 111 quarters including the
+    # perfectly good 2020-2026 window). The quarter that falls in the gap is
+    # dropped from the result; quarters with intact annual coverage still
+    # resolve normally.
     annual = [{"fiscalDateEnding": "2020-12-31"}, {"fiscalDateEnding": "2022-12-31"}]
-    quarterly = [{"fiscalDateEnding": "2021-03-31", "reportedDate": "2021-04-20"}]
-    with pytest.raises(FiscalDerivationError):
-        derive_fiscal_quarters(quarterly, annual)
+    quarterly = [
+        {"fiscalDateEnding": "2021-03-31", "reportedDate": "2021-04-20"},  # falls in the gap
+        {"fiscalDateEnding": "2022-09-30", "reportedDate": "2022-10-20"},  # intact coverage
+    ]
+    labels = derive_fiscal_quarters(quarterly, annual)
+    assert "2021-03-31" not in labels
+    assert labels["2022-09-30"] == "2022Q3"
+
+
+def test_quarter_far_outside_annual_coverage_is_skipped():
+    # A quarter far older than the earliest annualEarnings row lands on the
+    # same "invalid quarter number" branch as the gap case above (the nearest
+    # available FY end is many years later) - must be skipped, not raise.
+    annual = [{"fiscalDateEnding": "2022-12-31"}]
+    quarterly = [
+        {"fiscalDateEnding": "2019-03-31", "reportedDate": "2019-04-20"},
+        {"fiscalDateEnding": "2022-09-30", "reportedDate": "2022-10-20"},
+    ]
+    labels = derive_fiscal_quarters(quarterly, annual)
+    assert "2019-03-31" not in labels
+    assert labels["2022-09-30"] == "2022Q3"
 
 
 def test_duplicate_label_raises():

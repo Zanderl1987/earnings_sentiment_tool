@@ -36,9 +36,14 @@ def run_earnings_call_study(ticker, quarters=None, num_quarters=8, speakers=None
     lm_dict_path: optional path to the real Loughran-McDonald Master
     Dictionary CSV; falls back to the built-in starter word list otherwise.
 
-    Returns (per_quarter_df, correlation_results). correlation_results is
-    None if fewer than 3 quarters had usable data (correlation is meaningless
-    below that).
+    Returns (per_quarter_df, correlation_results). per_quarter_df always has
+    exactly one row per requested quarter - a quarter with no cached
+    transcript gets NaN metrics rather than being omitted, so "no data" stays
+    distinguishable from "never checked." correlation_results is None if
+    fewer than 3 quarters were requested; otherwise a dict of whichever
+    (sentiment, verbosity) pairs had at least 3 quarters with non-NaN values
+    on BOTH sides (dropna is pairwise, so one ticker's single missing quarter
+    doesn't disqualify every other quarter's real data).
     """
     quarters = quarters or default_recent_quarters(num_quarters)
 
@@ -50,10 +55,21 @@ def run_earnings_call_study(ticker, quarters=None, num_quarters=8, speakers=None
     transcripts = fetcher.fetch_recent_transcripts(ticker, quarters)
 
     rows = []
-    for quarter, entries in transcripts.items():
+    for quarter in quarters:
+        # A quarter with no cached transcript (pre-IPO, not yet called, quota
+        # exhausted) must still appear as a row - silently omitting it would
+        # make "no data" indistinguishable from "we never checked" or a bug
+        # that lost real data. But analyze_transcript([]) returns word_count=0
+        # and num_speaker_turns=0 (real zeros, not NaN) alongside fog_index/
+        # lm_net_sentiment=None - a mix that would let "no transcript exists"
+        # masquerade as "management said zero words" in any word_count-based
+        # correlation (dropna() doesn't remove real zeros). So every metric is
+        # forced to NaN for a quarter with no transcript at all, not just the
+        # two analyze_text already treats that way.
+        entries = transcripts.get(quarter, [])
         metrics = analyzer.analyze_transcript(entries, speakers=speakers)
-        if metrics["word_count"] == 0:
-            continue
+        if not entries:
+            metrics = {k: float("nan") for k in metrics}
         metrics["quarter"] = quarter
         rows.append(metrics)
 
@@ -66,15 +82,15 @@ def run_earnings_call_study(ticker, quarters=None, num_quarters=8, speakers=None
     if len(per_quarter_df) >= 3:
         correlation_results = {}
         for sentiment_col in ("lm_net_sentiment", "av_sentiment"):
-            if per_quarter_df[sentiment_col].isna().any():
-                continue
             for verbosity_col in ("word_count", "fog_index"):
-                pearson_r, pearson_p = stats.pearsonr(
-                    per_quarter_df[sentiment_col], per_quarter_df[verbosity_col]
-                )
-                spearman_r, spearman_p = stats.spearmanr(
-                    per_quarter_df[sentiment_col], per_quarter_df[verbosity_col]
-                )
+                # Pairwise dropna, not a whole-column skip: one NaN quarter
+                # (no transcript) must not disqualify every other quarter's
+                # real data from being correlated.
+                pair = per_quarter_df[[sentiment_col, verbosity_col]].dropna()
+                if len(pair) < 3:
+                    continue
+                pearson_r, pearson_p = stats.pearsonr(pair[sentiment_col], pair[verbosity_col])
+                spearman_r, spearman_p = stats.spearmanr(pair[sentiment_col], pair[verbosity_col])
                 correlation_results[f"{sentiment_col}_vs_{verbosity_col}"] = {
                     "pearson_r": pearson_r, "pearson_p": pearson_p,
                     "spearman_r": spearman_r, "spearman_p": spearman_p,
@@ -86,7 +102,11 @@ def run_earnings_call_study(ticker, quarters=None, num_quarters=8, speakers=None
 def print_study_results(ticker, per_quarter_df, correlation_results):
     print(f"--- Earnings Call Verbosity/Sentiment Study: {ticker} ---")
     if per_quarter_df.empty:
-        print("No transcript data available (quota exhausted, invalid ticker, or no calls yet).")
+        print("No quarters requested.")
+        return
+    if per_quarter_df["word_count"].isna().all():
+        print("No transcript data available for any requested quarter "
+              "(quota exhausted, invalid ticker, or no calls yet).")
         return
     print(per_quarter_df[[
         "quarter", "word_count", "fog_index", "lm_net_sentiment", "av_sentiment", "num_speaker_turns"

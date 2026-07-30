@@ -70,7 +70,10 @@ def main():
                   "not reach the join.")
             continue
         panel, _ = run_earnings_call_study(ticker, quarters=PINNED_QUARTERS)   # guaranteed cache hit, all quarters cached above
-        if panel.empty:
+        # panel always has one row per pinned quarter now (empty quarters get
+        # NaN metrics, not omitted) - "no usable data" means every row is NaN,
+        # not that the frame itself is empty.
+        if panel["word_count"].isna().all():
             print(f"{ticker}: no usable transcripts in cache. Skipping.")
             continue
         panels[ticker] = panel
